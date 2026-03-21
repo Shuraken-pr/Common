@@ -3,6 +3,8 @@ unit vstHelper;
 interface
 
 uses
+  System.SysUtils,
+  System.Classes,
   VirtualTrees,
   Generics.Collections;
 
@@ -66,15 +68,12 @@ begin
     else
   begin
     obj := TObject(GetNodeData(ANode)^);
-    if not Assigned(obj) then
+    if not (obj is T) then
     begin
+      if Assigned(obj) then
+        FreeAndNil(obj);
       V := ANode;
       T(GetNodeData(V)^) := TBaseRecord.CreateClass<T>;
-    end
-      else
-    begin
-      if obj is T then
-        V := ANode;
     end;
   end;
   if Assigned(V) then
