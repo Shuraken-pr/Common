@@ -1,0 +1,107 @@
+unit intf_common;
+
+interface
+
+uses
+  intf_dll,
+  intf_tasks,
+  System.SysUtils,
+  Winapi.Windows,
+  System.Generics.Collections;
+
+type
+  IDllIntfRun = interface(IDLLIntf)
+    ['{B3753E4F-F00D-416C-97E5-9BF72E5F251D}']
+    procedure Run(ACallbackProc: TProc<WideString>; MainAppHandle: HWnd); safecall;
+  end;
+
+  ISimpleNumbers = interface(IDllIntfRun)
+    ['{D6A333A4-585C-4494-9105-661CFE4B8503}']
+    procedure SilentRun(AMaxNum: integer; ACallbackProc: TProc<WideString>); safecall;
+  end;
+
+  ICalcPrice = interface(IDllIntfRun)
+    ['{74C97DEE-0026-437E-8B8E-EDED082A8323}']
+    procedure CalcPrices(InputPriceWithNDS: double; ProcNDS: Integer;
+    out CorrectedPriceWithNDS, CorrectedPriceWithoutNDS: double); safecall;
+  end;
+
+  IExplorer = interface(IDllIntfRun)
+    ['{EAB34C53-B919-40D1-866F-F832E644ECCD}']
+    procedure initFindIntf(AIntf: IRunTaskFindInDir); safecall;
+  end;
+
+  IRunTasks = interface(IDLLIntfRun)
+    ['{D144885F-E776-42BC-B4CB-6B90F699F87D}']
+    procedure initRunTasks(AFindInDir: IRunTaskFindInDir;
+                           AFindInExeFile: IRunTaskFindInExeFile;
+                           AShellExecute: IRunTaskShellExecute);
+  end;
+
+  function DISimpleNumbers: TDLLInfo;
+  function DICalcPrice: TDLLInfo;
+  function DIExplorer: TDLLInfo;
+  function DIRunTaskFindInDir: TDLLInfo;
+  function DIRunTaskFindInExeFile: TDLLInfo;
+  function DIRunTaskShellExecute: TDLLInfo;
+  function DIRunTasks: TDLLInfo;
+
+implementation
+
+function DISimpleNumbers:  TDLLInfo;
+begin
+  Result.FileName := 'SimpleNumbers.dll';
+  Result.InitProc := 'InitSimpleNumbers';
+  Result.intfName := 'ISimpleNumbers';
+  Result.guid := ISimpleNumbers;
+end;
+
+function DICalcPrice:  TDLLInfo;
+begin
+  Result.FileName := 'CalcPrice.dll';
+  Result.InitProc := 'InitCalcPrice';
+  Result.intfName := 'ICalcPrice';
+  Result.guid := ICalcPrice;
+end;
+
+function DIExplorer:  TDLLInfo;
+begin
+  Result.FileName := 'Explorer.dll';
+  Result.InitProc := 'InitExplorer';
+  Result.intfName := 'IExplorer';
+  Result.guid := IExplorer;
+end;
+
+function DIRunTaskFindInDir:  TDLLInfo;
+begin
+  Result.FileName := 'RunTaskFind.dll';
+  Result.InitProc := 'InitRunTaskFindInDir';
+  Result.intfName := 'IRunTaskFindInDir';
+  Result.guid := IRunTaskFindInDir;
+end;
+
+function DIRunTaskFindInExeFile: TDLLInfo;
+begin
+  Result.FileName := 'RunTaskFind.dll';
+  Result.InitProc := 'InitRunTaskFindInExeFile';
+  Result.intfName := 'IRunTaskFindInExeFile';
+  Result.guid := IRunTaskFindInExeFile;
+end;
+
+function DIRunTaskShellExecute: TDLLInfo;
+begin
+  Result.FileName := 'RunTaskShellExecute.dll';
+  Result.InitProc := 'InitRunTaskShellExecute';
+  Result.intfName := 'IRunTaskShellExecute';
+  Result.guid := IRunTaskShellExecute;
+end;
+
+function DIRunTasks: TDLLInfo;
+begin
+  Result.FileName := 'RunTasks.dll';
+  Result.InitProc := 'InitRunTasks';
+  Result.intfName := 'IRunTasks';
+  Result.guid := IRunTasks;
+end;
+
+end.
