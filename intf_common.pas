@@ -5,6 +5,7 @@ interface
 uses
   intf_dll,
   intf_tasks,
+  intf_dll_manager,
   System.SysUtils,
   Winapi.Windows,
   System.Generics.Collections;
@@ -26,16 +27,22 @@ type
     out CorrectedPriceWithNDS, CorrectedPriceWithoutNDS: double); safecall;
   end;
 
-  IExplorer = interface(IDllIntfRun)
+  IExplorer = interface(IDllIntfRunWithDeps)
     ['{EAB34C53-B919-40D1-866F-F832E644ECCD}']
     procedure initFindIntf(AIntf: IRunTaskFindInDir); safecall;
   end;
 
-  IRunTasks = interface(IDLLIntfRun)
+  IRunTasks = interface(IDllIntfRunWithDeps)
     ['{D144885F-E776-42BC-B4CB-6B90F699F87D}']
     procedure initRunTasks(AFindInDir: IRunTaskFindInDir;
                            AFindInExeFile: IRunTaskFindInExeFile;
-                           AShellExecute: IRunTaskShellExecute);
+                           AShellExecute: IRunTaskShellExecute); safecall;
+
+    /// <summary>
+    /// Альтернативный метод инициализации через IDllManager.
+    /// Плагин сам загрузит нужные DLL через переданный менеджер.
+    /// </summary>
+    procedure InitViaDllManager; safecall;
   end;
 
   function DISimpleNumbers: TDLLInfo;

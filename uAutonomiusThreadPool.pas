@@ -1,4 +1,4 @@
-unit uAutonomiusThreadPool;
+﻿unit uAutonomiusThreadPool;
 
 interface
 
@@ -39,7 +39,9 @@ begin
       l.Remove(T);
       t.OnTerminate := nil;
       if not t.Finished then
+      begin
         t.Terminate;
+      end;
     end;
   finally
     FThreadList.UnlockList;
@@ -84,9 +86,12 @@ end;
 
 function TThreadPoolManager.Stop(AThread: TThread): boolean;
 begin
-  Result := AThread.ThreadID <> 0;
+  Result := Assigned(AThread) and (AThread.ThreadID <> 0);
   if Result then
+  begin
     Remove(AThread);
+    AThread.Terminate;  // <- ключевое: сигнализировать потоку о завершении
+  end;
 end;
 
 end.

@@ -1,4 +1,4 @@
-unit DllManager;
+п»їunit DllManager;
 
 interface
 
@@ -6,21 +6,32 @@ uses
   System.Classes,
   System.SysUtils,
   Winapi.Windows,
+  System.SyncObjs,
   intf_dll,
+  intf_dll_manager,
   System.Generics.Collections;
 
 type
-  TDllManager = class(TObject)
+  TDllManager = class(TInterfacedObject, IDllManager)
   private
-    FProviders: TDictionary<string, IInterface>;    // key -> интерфейс
-    FModules: TDictionary<string, THandle>; // key -> HMODULE
+    FProviders: TDictionary<string, IInterface>;
+    FModules: TDictionary<string, THandle>;
+    FLock: TCriticalSection;
+    procedure FreeLibraryAll;
   public
     constructor Create;
     destructor Destroy; override;
-    function Load<T: IDllIntf>(ADllInfo: TDLLInfo; ShowError: boolean = true): boolean;
-    function UnLoad(ADllInfo: TDLLInfo): boolean;
-    procedure UnloadAll;
-    function GetIntf<T: IDllIntf>(ADllInfo: TDLLInfo): T;
+
+    // IDllManager interface (non-generic, safecall вЂ” for use from DLLs)
+    function Load(const ADllInfo: TDLLInfo; ShowError: Boolean = True): Boolean; safecall;
+    function UnLoad(const ADllInfo: TDLLInfo): Boolean; safecall;
+    procedure UnloadAll; safecall;
+    function GetIntf(const AGUID: TGUID): IInterface; safecall;
+    function IsLoaded(const AIntfName: WideString): Boolean; safecall;
+
+    // Generic wrappers for convenience in the main application
+    function LoadGeneric<T: IDllIntf>(ADllInfo: TDLLInfo; ShowError: Boolean = True): Boolean;
+    function GetIntfGeneric<T: IDllIntf>(ADllInfo: TDLLInfo): T;
   end;
 
 implementation
@@ -32,65 +43,71 @@ type
 
 constructor TDllManager.Create;
 begin
+  inherited Create;
+  FLock := TCriticalSection.Create;
   FProviders := TDictionary<string, IInterface>.Create;
   FModules := TDictionary<string, THandle>.Create;
 end;
 
 destructor TDllManager.Destroy;
 begin
-  UnloadAll;
-  FreeAndNil(FProviders);
-  FreeAndNil(FModules);
+  // UnloadAll СѓР¶Рµ РґРµР»Р°РµС‚ FProviders.Clear + FreeLibraryAll
+  // РќРѕ РєРѕРЅС‚РµР№РЅРµСЂС‹ РµС‰С‘ РЅРµ СѓРЅРёС‡С‚РѕР¶РµРЅС‹ вЂ” РѕСЃРІРѕР±РѕР¶РґР°РµРј РёС… Р·РґРµСЃСЊ
+  FProviders.Free;
+  FModules.Free;
+  FLock.Free;
   inherited;
 end;
 
-function TDllManager.GetIntf<T>(ADllInfo: TDLLInfo): T;
+procedure TDllManager.FreeLibraryAll;
 var
-  intf: IInterface;
-  specific: T;
+  pair: TPair<string, THandle>;
 begin
-  Result := nil;
-  if FProviders.TryGetValue(ADllInfo.intfName, intf) then
+  for pair in FModules do
   begin
-    if Supports(intf, ADllInfo.guid, specific) then
-      Result := specific;
+    if pair.Value <> 0 then
+      FreeLibrary(pair.Value);
   end;
 end;
 
-function TDllManager.Load<T>(ADllInfo: TDLLInfo; ShowError: boolean): boolean;
+{ === IDllManager (non-generic, safecall вЂ” for use from DLLs) === }
+
+function TDllManager.Load(const ADllInfo: TDLLInfo; ShowError: Boolean): Boolean;
 var
   hMod: THandle;
   funcPtr: Pointer;
   createFunc: TCreateDllIntf;
   rawIntf: IInterface;
   baseProvider: IDLLIntf;
-  specific: T;
+  usesDllMgr: IUsesDllManager;
 begin
-  Result := false;
+  Result := False;
 
-  if not FileExists(ADllInfo.FileName) then
-  begin
-    if ShowError then
-      raise EArgumentException.CreateFmt('Файл %s не найден', [ADllInfo.FileName])
-    else
-      exit;
-  end;
+  FLock.Enter;
+  try
+    if not FileExists(ADllInfo.FileName) then
+    begin
+      if ShowError then
+        raise EArgumentException.CreateFmt('File %s not found', [ADllInfo.FileName]);
+      Exit;
+    end;
 
-  if FProviders.ContainsKey(ADllInfo.intfName) then
-  begin
-    if ShowError then
-      raise Exception.Create('Интерфейс уже загружен')
-    else
-      exit;
+    if FProviders.ContainsKey(ADllInfo.intfName) then
+    begin
+      if ShowError then
+        raise Exception.Create('Interface already loaded');
+      Exit;
+    end;
+  finally
+    FLock.Leave;
   end;
 
   hMod := LoadLibrary(PChar(ADllInfo.FileName));
   if hMod = 0 then
   begin
     if ShowError then
-      raise Exception.CreateFmt('Не удалось загрузить %s: %d', [ADllInfo.FileName, GetLastError])
-    else
-      exit;
+      raise Exception.CreateFmt('Failed to load %s: %d', [ADllInfo.FileName, GetLastError]);
+    Exit;
   end;
 
   try
@@ -98,94 +115,172 @@ begin
     if not Assigned(funcPtr) then
     begin
       if ShowError then
-        raise Exception.CreateFmt('Функция %s не найдена в %s', [ADllInfo.InitProc, ADllInfo.FileName])
-      else
-        exit;
+        raise Exception.CreateFmt('Function %s not found in %s', [ADllInfo.InitProc, ADllInfo.FileName]);
+      Exit;
     end;
 
     @createFunc := funcPtr;
 
-    rawIntf := nil;
     try
       rawIntf := createFunc;
     except
       on E: Exception do
       begin
         if ShowError then
-          raise Exception.CreateFmt('Ошибка при вызове %s: %s', [ADllInfo.InitProc, E.Message])
-        else
-          exit;
+          raise Exception.CreateFmt('Error calling %s: %s', [ADllInfo.InitProc, E.Message]);
+        Exit;
       end;
     end;
 
     if rawIntf = nil then
     begin
       if ShowError then
-        raise Exception.CreateFmt('%s вернул nil', [ADllInfo.InitProc])
-      else
-        exit;
+        raise Exception.CreateFmt('%s returned nil', [ADllInfo.InitProc]);
+      Exit;
     end;
 
     if not Supports(rawIntf, IDllIntf, baseProvider) then
     begin
       if ShowError then
-        raise Exception.Create('Интерфейс IDllIntf не поддерживается')
-       else
-        exit;
+        raise Exception.Create('IDllIntf interface not supported');
+      Exit;
     end;
 
-    if not Supports(baseProvider, ADllInfo.guid, specific) then
-    begin
-      if ShowError then
-        raise Exception.CreateFmt('Интерфейс %s не поддерживается', [ADllInfo.intfName])
-      else
-        exit;
+    // Inject IDllManager if the plugin supports IUsesDllManager
+    if Supports(rawIntf, IUsesDllManager, usesDllMgr) then
+      usesDllMgr.SetDllManager(Self);
+
+    FLock.Enter;
+    try
+      FProviders.Add(ADllInfo.intfName, rawIntf);
+      if not FModules.ContainsKey(ADllInfo.FileName) then
+        FModules.Add(ADllInfo.FileName, hMod);
+    finally
+      FLock.Leave;
     end;
 
-    FProviders.Add(ADllInfo.intfName, specific);
-    if not FModules.ContainsKey(ADllInfo.FileName) then
-      FModules.Add(ADllInfo.FileName, hMod);
-
-    hMod := 0;
-    Result := true;
+    hMod := 0; // ownership transferred
+    Result := True;
   finally
     if hMod <> 0 then
-    begin
-      Result := false;
       FreeLibrary(hMod);
-    end;
   end;
 end;
 
-function TDllManager.UnLoad(ADllInfo: TDLLInfo): boolean;
+function TDllManager.UnLoad(const ADllInfo: TDLLInfo): Boolean;
 var
   hMod: THandle;
   intf: IInterface;
 begin
-  Result := false;
-  if not FProviders.TryGetValue(ADllInfo.FileName, intf) then
-    exit;
+  Result := False;
+  FLock.Enter;
+  try
+    if not FProviders.TryGetValue(ADllInfo.intfName, intf) then
+      Exit;
 
-  if FModules.TryGetValue(ADllInfo.FileName, hMod) then
-  begin
-    FProviders.Remove(ADllInfo.FileName);
-    if hMod <> 0 then
-      FreeLibrary(hMod);
+    FProviders.Remove(ADllInfo.intfName);
+    if FModules.TryGetValue(ADllInfo.FileName, hMod) then
+    begin
+      FModules.Remove(ADllInfo.FileName);
+      if hMod <> 0 then
+        FreeLibrary(hMod);
+    end;
+  finally
+    FLock.Leave;
   end;
-  intf := nil;
-  Result := true;
+  // РћСЃРІРѕР±РѕР¶РґР°РµРј СЃСЃС‹Р»РєСѓ РЅР° РёРЅС‚РµСЂС„РµР№СЃ РџРћРЎР›Р• СЃРЅСЏС‚РёСЏ Р±Р»РѕРєРёСЂРѕРІРєРё
+  // (РёР·Р±РµРіР°РµРј РїРѕС‚РµРЅС†РёР°Р»СЊРЅРѕРіРѕ deadlock РїСЂРё РѕСЃРІРѕР±РѕР¶РґРµРЅРёРё РѕР±СЉРµРєС‚Р° РёР· DLL)
+  Pointer(intf) := nil;
+  Result := True;
 end;
 
 procedure TDllManager.UnloadAll;
-var
-  pair: TPair<string, THandle>;
 begin
-  FProviders.Clear;
+  FLock.Enter;
+  try
+    // 1. РЎРЅР°С‡Р°Р»Р° РѕСЃРІРѕР±РѕР¶РґР°РµРј РёРЅС‚РµСЂС„РµР№СЃС‹ (РёР· DLL)
+    FProviders.Clear;
+    // 2. РўРѕР»СЊРєРѕ РїРѕС‚РѕРј РІС‹РіСЂСѓР¶Р°РµРј DLL
+    FreeLibraryAll;
+    FModules.Clear;
+  finally
+    FLock.Leave;
+  end;
+end;
 
-  for pair in FModules do
+function TDllManager.GetIntf(const AGUID: TGUID): IInterface;
+var
+  pair: TPair<string, IInterface>;
+  intf: IInterface;
+begin
+  Result := nil;
+  FLock.Enter;
+  try
+    for pair in FProviders do
+    begin
+      if Supports(pair.Value, AGUID, intf) then
+      begin
+        Result := intf;
+        Exit;
+      end;
+    end;
+  finally
+    FLock.Leave;
+  end;
+end;
+
+function TDllManager.IsLoaded(const AIntfName: WideString): Boolean;
+begin
+  FLock.Enter;
+  try
+    Result := FProviders.ContainsKey(AIntfName);
+  finally
+    FLock.Leave;
+  end;
+end;
+
+{ === Generic wrappers (for convenience in the main application) === }
+
+function TDllManager.LoadGeneric<T>(ADllInfo: TDLLInfo; ShowError: Boolean): Boolean;
+var
+  rawIntf: IInterface;
+  specific: T;
+begin
+  Result := Load(ADllInfo, ShowError);
+  if Result then
   begin
-    if pair.Value <> 0 then
-      FreeLibrary(pair.Value);
+    FLock.Enter;
+    try
+      if FProviders.TryGetValue(ADllInfo.intfName, rawIntf) then
+      begin
+        if not Supports(rawIntf, ADllInfo.guid, specific) then
+        begin
+          if ShowError then
+            raise Exception.CreateFmt('Interface %s not supported', [ADllInfo.intfName]);
+          Result := False;
+        end;
+      end;
+    finally
+      FLock.Leave;
+    end;
+  end;
+end;
+
+function TDllManager.GetIntfGeneric<T>(ADllInfo: TDLLInfo): T;
+var
+  intf: IInterface;
+  specific: T;
+begin
+  Result := nil;
+  FLock.Enter;
+  try
+    if FProviders.TryGetValue(ADllInfo.intfName, intf) then
+    begin
+      if Supports(intf, ADllInfo.guid, specific) then
+        Result := specific;
+    end;
+  finally
+    FLock.Leave;
   end;
 end;
 
