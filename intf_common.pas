@@ -1,4 +1,4 @@
-unit intf_common;
+﻿unit intf_common;
 
 interface
 
@@ -45,6 +45,14 @@ type
     procedure InitViaDllManager; safecall;
   end;
 
+  /// <summary>
+  /// Интерфейс плагина работы с логгированием изменений в БД.
+  /// Поддерживает PostgreSQL, MS SQL Server, Oracle.
+  /// </summary>
+  ILogData = interface(IDllIntfRun)
+    ['{18F44553-FE95-4DDE-8C36-BA9B09519B11}']
+  end;
+
   function DISimpleNumbers: TDLLInfo;
   function DICalcPrice: TDLLInfo;
   function DIExplorer: TDLLInfo;
@@ -52,6 +60,7 @@ type
   function DIRunTaskFindInExeFile: TDLLInfo;
   function DIRunTaskShellExecute: TDLLInfo;
   function DIRunTasks: TDLLInfo;
+  function DILogData: TDLLInfo;
 
 implementation
 
@@ -109,6 +118,14 @@ begin
   Result.InitProc := 'InitRunTasks';
   Result.intfName := 'IRunTasks';
   Result.guid := IRunTasks;
+end;
+
+function DILogData: TDLLInfo;
+begin
+  Result.FileName := 'LogData.dll';
+  Result.InitProc := 'InitLogData';
+  Result.intfName := 'ILogData';
+  Result.guid := ILogData;
 end;
 
 end.
