@@ -53,6 +53,10 @@ type
     ['{18F44553-FE95-4DDE-8C36-BA9B09519B11}']
   end;
 
+  IPartsCatalog = interface(IDllIntfRun)
+    ['{28C155B1-41A8-4101-90AA-B211C13FE093}']
+  end;
+
   function DISimpleNumbers: TDLLInfo;
   function DICalcPrice: TDLLInfo;
   function DIExplorer: TDLLInfo;
@@ -61,6 +65,7 @@ type
   function DIRunTaskShellExecute: TDLLInfo;
   function DIRunTasks: TDLLInfo;
   function DILogData: TDLLInfo;
+  function DICatalogParts: TDLLInfo;
 
 implementation
 
@@ -126,6 +131,14 @@ begin
   Result.InitProc := 'InitLogData';
   Result.intfName := 'ILogData';
   Result.guid := ILogData;
+end;
+
+function DICatalogParts: TDLLInfo;
+begin
+  Result.FileName := 'PartsCatalog.dll';
+  Result.InitProc := 'InitPartsCatalog';
+  Result.intfName := 'IPartsCatalog';
+  Result.guid := IPartsCatalog;
 end;
 
 end.
