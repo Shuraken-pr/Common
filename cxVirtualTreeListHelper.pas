@@ -386,6 +386,8 @@ begin
   FRootHandle.Free;
   //создадим заново
   FRootHandle := T.Create(nil);
+  //сообщим об изменениях
+  DataChanged;
 end;
 
 constructor TVTBaseDataSource<T>.Create(const ATreeList: TcxVirtualTreeList);

@@ -8,6 +8,7 @@ uses System.SysUtils, System.Classes, Winapi.Windows, Winapi.Messages, Vcl.Forms
 type
   TFDMoniCustomLogger = class(TFDMoniCustomClientLink)
   private
+    FConType: integer;
     procedure FDMonitorOutput(ASender: TFDMoniClientLinkBase; const AClassName,
       AObjName, AMessage: string);
   public
@@ -19,7 +20,7 @@ procedure SendMonitorMessage(const s: string);
 
 implementation
 
-uses FireDAC.Stan.Intf, FireDAC.Stan.Param, FireDAC.Phys, Data.DB, System.Variants;
+uses FireDAC.Stan.Intf, FireDAC.Stan.Param, FireDAC.Phys, Data.DB, System.Variants, strUtils;
 
 procedure SendMonitorMessage(const s: string);
 var
@@ -49,6 +50,7 @@ end;
 constructor TFDMoniCustomLogger.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
+  FConType := 0;
   Self.OnOutput := FDMonitorOutput;
 end;
 
@@ -56,6 +58,10 @@ procedure TFDMoniCustomLogger.SetConnection(AConnection: TFDConnection);
 begin
   if Assigned(AConnection) then
   begin
+    if AConnection.Params.DriverID = 'Ora' then
+      FConType := 1
+    else if AConnection.Params.DriverID = 'MSSQL' then
+      FConType := 2;
     AConnection.Params.MonitorBy := mbCustom;
     Self.Tracing := true;
     Self.EventKinds := [ekCmdExecute, ekSQL];
@@ -65,7 +71,7 @@ end;
 type
   THackFDPhysCommand = class(TFDPhysCommand);
 
-function GetFDParamsStr(const AParams: TFDParams): string;
+function GetMSSQLFDParamsStr(const AParams: TFDParams): string;
 var
   p: TFDParam;
   paramName, paramValue: string;
@@ -99,50 +105,37 @@ begin
         ftString,
         ftWideString:
           begin
-            paramName := 'text';
+            paramName := 'nvarchar';
+            if p.Size < 4000 then
+              paramName := paramName + '(' + IntToStr(p.Size) + ')'
+            else
+              paramName := paramName + '(max)';
             SetParamValue(true);
           end;
         ftSmallint,
-        ftWord:
-          begin
-            paramName := 'smallint';
-            SetParamValue;
-          end;
+        ftWord,
         ftInteger:
           begin
-            paramName := 'integer';
+            paramName := 'int';
             SetParamValue;
           end;
         ftBoolean:
           begin
-            paramName := 'boolean';
-            SetParamValue(false, BoolToStr(p.AsBoolean, true));
+            paramName := 'bit';
+            SetParamValue(false, BoolToStr(p.AsBoolean));
           end;
-        ftFloat:
-          begin
-            paramName := 'double';
-            SetParamValue;
-          end;
+        ftFloat,
+        ftFMTBcd,
         ftCurrency:
           begin
             paramName := 'numeric(18,4)';
             SetParamValue(false, FormatFloat('0.0000', p.AsFloat))
           end;
-        ftDate:
+        ftDateTime:
           begin
-            paramName := 'date';
-            SetParamValue(false, QuotedStr(FormatDateTime('yyyy-mm-dd', p.AsDateTime)));
-          end;
-        ftTime:
-          begin
-            paramName := 'time';
-            SetParamValue(false, QuotedStr(FormatDateTime('hh:nn:ss', p.AsDateTime)));
-          end;
-        ftDateTime,
-        ftTimeStamp:
-          begin
-            paramName := 'timestamp';
-            SetParamValue(false, QuotedStr(FormatDateTime('yyyy-mm-dd hh:nn:ss', p.AsDateTime)));
+            paramName := 'datetime';
+            SetParamValue(false, 'convert(datetime, ' +
+            QuotedStr(FormatDateTime('dd.mm.yyyy hh:nn:ss', p.AsDateTime) + ', 104)'));
           end;
         ftLargeint:
           begin
@@ -160,7 +153,35 @@ begin
     end;
   end;
   if Result <> '' then
-    Result := '/*' + Result + ';*/' + #13#10#13#10;
+    Result := Result + #13#10#13#10;
+end;
+
+function GetPGMSG(const AParams: TFDParams; const AMsg: string): string;
+var
+  i: integer;
+  p: TFDParam;
+  paramValue: string;
+begin
+  Result := AMsg;
+  for i := 0 to AParams.Count - 1 do
+  begin
+    p := TFDParam(AParams[i]);
+    if p.ParamType in [ptInput, ptUnknown] then
+    begin
+      if not p.IsNull then
+      begin
+        if p.DataType in [ftString, ftWideString] then
+          paramValue := QuotedStr(p.AsString)
+        else if p.DataType in [ftDate, ftDateTime, ftTimeStamp] then
+          paramValue := QuotedStr(FormatDateTime('yyyy-mm-dd hh:nn:ss', p.AsDateTime))
+        else
+          paramValue := p.AsString;
+      end;
+    end
+      else
+      paramValue := 'NULL';
+    Result := AnsiReplaceText(Result, ':' + p.Name, paramValue)
+  end;
 end;
 
 procedure TFDMoniCustomLogger.FDMonitorOutput(ASender: TFDMoniClientLinkBase;
@@ -182,9 +203,15 @@ begin
 
     if Assigned(cmd) then
     begin
-      ParamStr := '';
-      msg := GetFDParamsStr(cmd.GetParams) + cmd.GetCommandText;
-      SendMonitorMessage(ObjName + '~' + AppName + '~' + msg);
+      ParamStr := cmd.GetCommandText;
+      if paramStr <> '' then
+      begin
+        case FConType of
+          0: msg := GetPGMSG(cmd.GetParams, ParamStr);
+          2: msg := GetMSSQLFDParamsStr(cmd.GetParams) + ParamStr;
+        end;
+        SendMonitorMessage(ObjName + '~' + AppName + '~' + msg);
+      end;
     end;
   end;
 end;

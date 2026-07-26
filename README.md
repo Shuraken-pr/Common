@@ -45,6 +45,14 @@
   - `TVTLoadAllDataSource<T>`: Стратегия **LoadAll** (жадная загрузка). Всё дерево строится заранее, доступ осуществляется по индексу через внутренний `TObjectList`.
 - **`vstHelper.pas`**: Class Helper для `TBaseVirtualTree` (библиотека VirtualTree). Позволяет легко привязывать типизированные объекты (`TBaseRecord`) к узлам дерева (`PVirtualNode`) и извлекать их через `CurrentObj<T>`.
 
+### 6. Мониторинг и логирование FireDAC
+Обеспечивает перехват, форматирование и отправку SQL-запросов и их параметров во внешнее окно отладки (SQL Logger) в реальном времени.
+- **`FireDAC.Moni.Custom.Logger.pas`**: Базовая реализация кастомного клиента мониторинга FireDAC (`TFDMoniCustomClientLink` и `TFDMoniCustomClient`). Позволяет перехватывать события FireDAC (выполнение команд, SQL) и передавать их через кастомный обработчик вывода (`IFDMoniCustomClient`), поддерживая синхронизацию с главным потоком.
+- **`FDMoniCustomLoggerHelper.pas`**: Хелпер для удобного использования кастомного логгера. 
+  - Класс `TFDMoniCustomLogger` настраивает соединение (`TFDConnection`) на использование кастомного мониторинга (`mbCustom`) и фильтрует события (только `ekCmdExecute`, `ekSQL`).
+  - Функция `GetFDParamsStr` форматирует параметры запроса (с учетом типов данных: строки, числа, даты, NULL, boolean) в читаемый вид SQL-переменных (блок `declare`).
+  - Процедура `SendMonitorMessage` отправляет отформатированный SQL-запрос через механизм `WM_COPYDATA` в окно "SQL Logger" (`TfrmSQLLogger`) для отображения.
+
 ---
 
 ## 🚀 Руководство по использованию
@@ -123,6 +131,27 @@ begin
       NewNode := TMyNode(DataSource.InsertRecordHandle(AParent, True));
       NewNode.FTitle := 'Новый элемент';
     end);
+end;
+```
+
+### 5. Включение мониторинга SQL-запросов (FireDAC)
+Для отладки и логирования всех SQL-запросов, проходящих через `TFDConnection`, используйте кастомный монитор:
+```pascal
+uses
+  FireDAC.Comp.Client, FireDAC.Moni.Custom.Logger, FDMoniCustomLoggerHelper;
+
+var
+  Connection: TFDConnection;
+  Monitor: TFDMoniCustomLogger;
+begin
+  Connection := TFDConnection.Create(nil);
+  // ... настройка Connection ...
+  
+  Monitor := TFDMoniCustomLogger.Create(Connection);
+  Monitor.SetConnection(Connection); // Включает mbCustom и трассировку
+  
+  // Теперь все запросы (Execute/Open) с параметрами будут автоматически 
+  // отправляться в окно "SQL Logger" главного приложения через WM_COPYDATA.
 end;
 ```
 
