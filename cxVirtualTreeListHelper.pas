@@ -138,6 +138,9 @@ type
   public
     { Возвращает значение для указанного индекса колонки. }
     function  GetValue(ColIdx: Integer): Variant; virtual; abstract;
+    { Возвращает тип значения колонки. Наследники могут переопределить
+      метод, если тип нельзя определить по текущему Variant. }
+    function  GetFieldType(ColIdx: Integer): Integer; virtual;
     { Сохраняет значение для указанного индекса колонки. }
     procedure SetValue(ColIdx: Integer; const AValue: Variant); virtual; abstract;
     { Копирует значения полей из Source в Self.  Перекройте в наследниках;
@@ -242,6 +245,8 @@ type
   end;
 
 implementation
+
+uses System.Variants;
 
 { TVTBase }
 
@@ -368,6 +373,17 @@ begin
 end;
 
 { TVTBaseRecord }
+
+function TVTBaseRecord.GetFieldType(ColIdx: Integer): Integer;
+var
+  V: Variant;
+begin
+  V := GetValue(ColIdx);
+  if VarIsNull(V) or VarIsEmpty(V) then
+    Result := 0
+  else
+    Result := VarType(V);
+end;
 
 procedure TVTBaseRecord.Assign(Source: TVTBaseRecord);
 begin
