@@ -155,6 +155,7 @@ type
   private
     FRootHandle: T;
     FTreeList: TcxVirtualTreeList;
+    FCalcNode: TcxTreeListNode;
   protected
     { — Перекрытия TcxTreeListCustomDataSource — }
     function  GetValue(ARecordHandle: TcxDataRecordHandle;
@@ -183,6 +184,7 @@ type
     function Obj(ANode: TcxTreeListNode): T;
     procedure Clear; virtual;
     property RootHandle: T read FRootHandle;
+    property CalcNode: TcxTreeListNode read FCalcNode write FCalcNode;
   end;
 
   { TVTSmartDataSource<T> — SmartLoad (ленивая, навигационный API) }
@@ -414,6 +416,7 @@ begin
     конструктор Create(AParent) от TVTBase — поэтому T.Create(nil)
     вызывает корректный runtime-конструктор. }
   FRootHandle := T.Create(nil);
+  FCalcNode := nil;
   if ATreeList <> nil then
     ATreeList.CustomDataSource := Self;
 end;

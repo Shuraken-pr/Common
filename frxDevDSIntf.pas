@@ -44,6 +44,8 @@ type
     procedure PreviewDBReport(
       const AConnectionString: WideString;
       const AReportFile: WideString = ''); safecall;
+
+    function GetDSByName(ADSName: WideString): TfrxDataSet; safecall;
   end;
 
   { Информация для загрузки через DllManager }
