@@ -22,12 +22,14 @@ type
     { Открытие дизайнера с автоматической привязкой DataSource }
     procedure DesignReport(
       ADataSources: array of TVTBaseDataSource<TVTBaseRecord>;
-      ATreeLists: array of TcxVirtualTreeList); safecall;
+      ATreeLists: array of TcxVirtualTreeList;
+      const AReportFile: WideString = ''); safecall;
 
     { Открытие превью с данными }
     procedure PreviewReport(
       ADataSources: array of TVTBaseDataSource<TVTBaseRecord>;
-      ATreeLists: array of TcxVirtualTreeList); safecall;
+      ATreeLists: array of TcxVirtualTreeList;
+      const AReportFile: WideString = ''); safecall;
 
     procedure SetCustomFunction(AFunc: TFunc<WideString, WideString, variant>); safecall;
 
@@ -35,15 +37,13 @@ type
     procedure DesignDBReport(
       ASQLs: array of WideString;
       ADataSetNames: array of WideString;
-      AConnectionString: WideString;
-      AReportFile: WideString = ''); safecall;
+      const AConnectionString: WideString;
+      const AReportFile: WideString = ''); safecall;
 
     { Открытие превью с наборами данных и строкой подключения }
     procedure PreviewDBReport(
-      ASQLs: array of WideString;
-      ADataSetNames: array of WideString;
-      AConnectionString: WideString;
-      AReportFile: WideString = ''); safecall;
+      const AConnectionString: WideString;
+      const AReportFile: WideString = ''); safecall;
   end;
 
   { Информация для загрузки через DllManager }

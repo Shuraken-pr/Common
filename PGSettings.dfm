@@ -10,6 +10,7 @@ object frSettings: TfrSettings
   Font.Height = -12
   Font.Name = 'Segoe UI'
   Font.Style = []
+  Position = poScreenCenter
   TextHeight = 15
   object lcConnectionSettings: TdxLayoutControl
     Left = 0
@@ -19,7 +20,6 @@ object frSettings: TfrSettings
     Align = alClient
     TabOrder = 0
     LayoutLookAndFeel = dmSkin.dxLayoutSkinLookAndFeel
-    ExplicitHeight = 322
     object edPort: TcxSpinEdit
       Left = 85
       Top = 40
