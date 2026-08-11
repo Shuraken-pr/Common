@@ -5,7 +5,8 @@ interface
 uses
   System.SysUtils, System.Classes, System.NetEncoding, Xml.XmlIntf, Xml.XmlDoc,
   FireDAC.Comp.Client, FireDAC.Phys.PG, FireDAC.Phys.MSSQL, FireDAC.Phys.Oracle,
-  FireDAC.Stan.Def, FireDAC.Stan.Async, FireDAC.Stan.Intf, FireDAC.Stan.Pool;
+  FireDAC.Stan.Def, FireDAC.Stan.Async, FireDAC.Stan.Intf, FireDAC.Stan.Pool,
+  System.Generics.Collections;
 
 type
   TDBType = (dbPostgreSQL, dbMSSQL, dbOracle, dbUnknown);
@@ -32,19 +33,25 @@ type
     FPoolMaxItems: Integer;
     FPoolTimeout: Integer;
     FConnectionTimeout: Integer;
+    FValues: TDictionary<string,string>;
+    FShowPoolMaxItems: Boolean;
+    FShowPoolTimeout: Boolean;
     function GetDriverID: string;
     procedure SetDBType(const Value: TDBType);
+    function GetValue(const Name: string): string;
+    procedure SetValue(const Name, Value: string);
   protected
     procedure ApplyParamsToDef(AParams: TStrings);
   public
     constructor Create;
+    destructor Destroy; override;
     procedure Assign(ASource: TDBConnectionSettings);
 
-    procedure SaveToFile(const AFileName: string);
-    procedure LoadFromFile(const AFileName: string);
+    procedure SaveToFile(const AFileName: string; AAdditionalParams: array of string);
+    procedure LoadFromFile(const AFileName: string; AAdditionalParams: array of string);
 
     procedure ApplyToConnection(AConn: TFDConnection);
-    procedure RegisterInManager(AManager: TFDManager; const ADefName: string);
+    procedure RegisterInManager(var AManager: TFDManager; const ADefName: string);
 
     function TestConnection(out AErrorMsg: string; ATimeout: Integer = SDefaultConnectionTimeout): Boolean;
     function IsValid(out AErrorMsg: string): Boolean;
@@ -57,9 +64,12 @@ type
     property Password: string read FPassword write FPassword;
     property DriverID: string read GetDriverID;
     property ShowDBTypeSelector: Boolean read FShowDBTypeSelector write FShowDBTypeSelector;
+    property ShowPoolMaxItems: Boolean read FShowPoolMaxItems write FShowPoolMaxItems;
+    property ShowPoolTimeout: Boolean read FShowPoolTimeout write FShowPoolTimeout;
     property PoolMaxItems: Integer read FPoolMaxItems write FPoolMaxItems;
     property PoolTimeout: Integer read FPoolTimeout write FPoolTimeout;
     property ConnectionTimeout: Integer read FConnectionTimeout write FConnectionTimeout;
+    property Values[const Name: string]: string read GetValue write SetValue;
   end;
 
 implementation
@@ -137,9 +147,18 @@ begin
   FUsername := '';
   FPassword := '';
   FShowDBTypeSelector := True;
+  FShowPoolMaxItems := False;
+  FShowPoolTimeout := False;
   FPoolMaxItems := SDefaultPoolMaxItems;
   FPoolTimeout := SDefaultPoolTimeout;
   FConnectionTimeout := SDefaultConnectionTimeout;
+  FValues := TDictionary<string,string>.Create;
+end;
+
+destructor TDBConnectionSettings.Destroy;
+begin
+  FreeAndNil(FValues);
+  inherited;
 end;
 
 procedure TDBConnectionSettings.Assign(ASource: TDBConnectionSettings);
@@ -163,6 +182,16 @@ begin
   Result := DriverIDs[FDBType];
 end;
 
+function TDBConnectionSettings.GetValue(const Name: string): string;
+var
+  value: string;
+begin
+  if FValues.TryGetValue(Name, value) then
+    Result := value
+  else
+    Result := '';
+end;
+
 procedure TDBConnectionSettings.SetDBType(const Value: TDBType);
 begin
   FDBType := Value;
@@ -170,7 +199,18 @@ begin
     FPort := DefaultPorts[FDBType];
 end;
 
-{ ---------------------------------------------------------------------------- }
+procedure TDBConnectionSettings.SetValue(const Name, Value: string);
+begin
+  if FValues.ContainsKey(Name) then
+    FValues.AddOrSetValue(Name, Value);
+end;
+
+{procedure TDBConnectionSettings.SetValue(const Value: string);
+begin
+
+end;
+
+ ---------------------------------------------------------------------------- }
 {                                  Валидация                                   }
 { ---------------------------------------------------------------------------- }
 
@@ -216,11 +256,11 @@ end;
 {                              Сериализация в XML                              }
 { ---------------------------------------------------------------------------- }
 
-procedure TDBConnectionSettings.SaveToFile(const AFileName: string);
+procedure TDBConnectionSettings.SaveToFile(const AFileName: string; AAdditionalParams: array of string);
 var
   XMLDoc: IXMLDocument;
   RootNode: IXMLNode;
-  Dir: string;
+  Dir, key, value: string;
 begin
   Dir := ExtractFilePath(AFileName);
   if (Dir <> '') and not TDirectory.Exists(Dir) then
@@ -242,14 +282,21 @@ begin
   RootNode.AddChild(SXMLPoolMaxItems).Text := IntToStr(FPoolMaxItems);
   RootNode.AddChild(SXMLPoolTimeout).Text := IntToStr(FPoolTimeout);
   RootNode.AddChild(SXMLConnectionTimeout).Text := IntToStr(FConnectionTimeout);
+  for var i := Low(AAdditionalParams) to High(AAdditionalParams) do
+  begin
+    key := AAdditionalParams[i];
+    if FValues.TryGetValue(key, value) then
+      RootNode.AddChild(key).Text := value;
+  end;
 
   XMLDoc.SaveToFile(AFileName);
 end;
 
-procedure TDBConnectionSettings.LoadFromFile(const AFileName: string);
+procedure TDBConnectionSettings.LoadFromFile(const AFileName: string; AAdditionalParams: array of string);
 var
   XMLDoc: IXMLDocument;
   RootNode, Node: IXMLNode;
+  key: string;
 begin
   if not TFile.Exists(AFileName) then
     raise EFileNotFoundException.CreateFmt('Файл настроек не найден: %s', [AFileName]);
@@ -302,6 +349,17 @@ begin
     Node := RootNode.ChildNodes.FindNode(SXMLConnectionTimeout);
     if Assigned(Node) then
       FConnectionTimeout := StrToIntDef(Node.Text, SDefaultConnectionTimeout);
+
+    for var i := Low(AAdditionalParams) to High(AAdditionalParams) do
+    begin
+      key := AAdditionalParams[i];
+      Node := RootNode.ChildNodes.FindNode(key);
+      if Assigned(Node) then
+        FValues.TryAdd(key, Node.Text)
+      else
+        FValues.TryAdd(key, ' ');
+    end;
+
   finally
     XMLDoc.Active := False;
   end;
@@ -361,7 +419,7 @@ begin
   ApplyParamsToDef(AConn.Params);
 end;
 
-procedure TDBConnectionSettings.RegisterInManager(AManager: TFDManager;
+procedure TDBConnectionSettings.RegisterInManager(var AManager: TFDManager;
   const ADefName: string);
 var
   ConnDef: IFDStanConnectionDef;
@@ -370,14 +428,13 @@ begin
     Exit;
 
   // Пытаемся получить существующий ConnectionDef или создаём новый
-  ConnDef := AManager.ConnectionDefs.ConnectionDefByName(ADefName);
+  ConnDef := AManager.ConnectionDefs.FindConnectionDef(ADefName);
   if not Assigned(ConnDef) then
     ConnDef := AManager.ConnectionDefs.AddConnectionDef;
 
-  ConnDef.Name := ADefName;
-  ConnDef.MarkPersistent;
-
   ApplyParamsToDef(ConnDef.Params);
+
+  ConnDef.Name := ADefName;
 
   // Настройки пула
   ConnDef.Params.Pooled := (FPoolMaxItems > 0);

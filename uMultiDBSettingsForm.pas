@@ -36,15 +36,21 @@ type
     liOk: TdxLayoutItem;
     liCancel: TdxLayoutItem;
     liTest: TdxLayoutItem;
+    edMaxPoolItems: TcxSpinEdit;
+    liMaxPoolItems: TdxLayoutItem;
+    edPoolTimeout: TcxSpinEdit;
+    liPoolTimeout: TdxLayoutItem;
     procedure FormShow(Sender: TObject);
     procedure btnOkClick(Sender: TObject);
     procedure btnTestClick(Sender: TObject);
     procedure cbDBTypePropertiesChange(Sender: TObject);
+    procedure FormCreate(Sender: TObject);
   private
     FSettings: TDBConnectionSettings;
     FTestingConnection: Boolean;
     FShowDBTypeSelector: Boolean;
-
+    FShowPoolMaxItems: Boolean;
+    FShowPoolTimeout: Boolean;
     procedure LoadSettingsToForm;
     procedure SaveFormToSettings;
     function ValidateInput: Boolean;
@@ -52,7 +58,7 @@ type
     procedure EnableFormUI;
     procedure TestConnectionAsync(ACloseOnSuccess: Boolean);
     procedure ApplyDBTypeChange;
-    procedure UpdateDBTypeVisibility;
+    procedure UpdateVisibility;
   protected
     procedure DoClose(var Action: TCloseAction); override;
   public
@@ -86,6 +92,13 @@ end;
 {                              События формы                                   }
 { ============================================================================ }
 
+procedure TfrmMultiDBSettings.FormCreate(Sender: TObject);
+begin
+  FShowDBTypeSelector := True;
+  FShowPoolMaxItems := False;
+  FShowPoolTimeout := False;
+end;
+
 procedure TfrmMultiDBSettings.FormShow(Sender: TObject);
 begin
   // Инициализация комбобокса (items могут быть потеряны в DFM на некоторых версиях IDE)
@@ -103,7 +116,7 @@ begin
   end;
 
   LoadSettingsToForm;
-  UpdateDBTypeVisibility;
+  UpdateVisibility;
 end;
 
 procedure TfrmMultiDBSettings.btnOkClick(Sender: TObject);
@@ -375,22 +388,18 @@ end;
 {                               Видимость селектора                            }
 { ============================================================================ }
 
-procedure TfrmMultiDBSettings.UpdateDBTypeVisibility;
+procedure TfrmMultiDBSettings.UpdateVisibility;
 begin
-  FShowDBTypeSelector := Assigned(FSettings) and FSettings.ShowDBTypeSelector;
-
-  if not FShowDBTypeSelector then
+  if Assigned(FSettings) then
   begin
-    liDBType.Visible := False;
-    cbDBType.Visible := False;
-    cbDBType.Enabled := False;
-  end
-  else
-  begin
-    liDBType.Visible := True;
-    cbDBType.Visible := True;
-    cbDBType.Enabled := True;
+    FShowDBTypeSelector := FSettings.ShowDBTypeSelector;
+    FShowPoolMaxItems := FSettings.ShowPoolMaxItems;
+    FShowPoolTimeout := FSettings.ShowPoolTimeout;
   end;
+
+  liDBType.Visible := FShowDBTypeSelector;
+  liMaxPoolItems.Visible := FShowPoolMaxItems;
+  liPoolTimeout.Visible := FShowPoolTimeout;
 end;
 
 { ============================================================================ }

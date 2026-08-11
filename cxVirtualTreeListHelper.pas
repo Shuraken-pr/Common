@@ -620,8 +620,8 @@ end;
 
 procedure TVTLoadAllDataSource<T>.Clear;
 begin
-  inherited;
   FRecordList.Clear;
+  inherited;
 end;
 
 constructor TVTLoadAllDataSource<T>.Create(const ATreeList: TcxVirtualTreeList);

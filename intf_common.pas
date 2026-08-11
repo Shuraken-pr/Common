@@ -57,6 +57,10 @@ type
     ['{28C155B1-41A8-4101-90AA-B211C13FE093}']
   end;
 
+  IAnalyticDashboard = interface(IDllIntfRun)
+    ['{E596C0E8-0F19-4A4E-8E21-40BF4965FCA7}']
+  end;
+
   function DISimpleNumbers: TDLLInfo;
   function DICalcPrice: TDLLInfo;
   function DIExplorer: TDLLInfo;
@@ -66,6 +70,7 @@ type
   function DIRunTasks: TDLLInfo;
   function DILogData: TDLLInfo;
   function DICatalogParts: TDLLInfo;
+  function DIAnalyticDashboard: TDLLInfo;
 
 implementation
 
@@ -139,6 +144,14 @@ begin
   Result.InitProc := 'InitPartsCatalog';
   Result.intfName := 'IPartsCatalog';
   Result.guid := IPartsCatalog;
+end;
+
+function DIAnalyticDashboard: TDLLInfo;
+begin
+  Result.FileName := 'AnalyticDashboard.dll';
+  Result.InitProc := 'InitAnalyticDashboard';
+  Result.intfName := 'IAnalyticDashboard';
+  Result.guid := IAnalyticDashboard;
 end;
 
 end.
