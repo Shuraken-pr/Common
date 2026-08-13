@@ -24,6 +24,7 @@ type
 
     // IDllManager interface (non-generic, safecall — for use from DLLs)
     function Load(const ADllInfo: TDLLInfo; ShowError: Boolean = True): Boolean; safecall;
+    function InternalLoad(const ADllInfo: TDLLInfo; ShowError: Boolean = True): Boolean;
     function UnLoad(const ADllInfo: TDLLInfo): Boolean; safecall;
     procedure UnloadAll; safecall;
     function GetIntf(const AGUID: TGUID): IInterface; safecall;
@@ -72,7 +73,8 @@ end;
 
 { === IDllManager (non-generic, safecall — for use from DLLs) === }
 
-function TDllManager.Load(const ADllInfo: TDLLInfo; ShowError: Boolean): Boolean;
+function TDllManager.InternalLoad(const ADllInfo: TDLLInfo;
+  ShowError: Boolean): Boolean;
 var
   hMod: THandle;
   funcPtr: Pointer;
@@ -165,6 +167,11 @@ begin
     if hMod <> 0 then
       FreeLibrary(hMod);
   end;
+end;
+
+function TDllManager.Load(const ADllInfo: TDLLInfo; ShowError: Boolean): Boolean;
+begin
+  Result := InternalLoad(ADllInfo, ShowError);
 end;
 
 function TDllManager.UnLoad(const ADllInfo: TDLLInfo): Boolean;
