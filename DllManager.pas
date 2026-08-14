@@ -25,6 +25,7 @@ type
     // IDllManager interface (non-generic, safecall — for use from DLLs)
     function Load(const ADllInfo: TDLLInfo; ShowError: Boolean = True): Boolean; safecall;
     function InternalLoad(const ADllInfo: TDLLInfo; ShowError: Boolean = True): Boolean;
+    function InternalUnLoad(const ADllInfo: TDLLInfo): Boolean;
     function UnLoad(const ADllInfo: TDLLInfo): Boolean; safecall;
     procedure UnloadAll; safecall;
     function GetIntf(const AGUID: TGUID): IInterface; safecall;
@@ -33,6 +34,7 @@ type
     // Generic wrappers for convenience in the main application
     function LoadGeneric<T: IDllIntf>(ADllInfo: TDLLInfo; ShowError: Boolean = True): Boolean;
     function GetIntfGeneric<T: IDllIntf>(ADllInfo: TDLLInfo): T;
+    function GetLoadedCount: NativeInt;
   end;
 
 implementation
@@ -154,9 +156,8 @@ begin
 
     FLock.Enter;
     try
-      FProviders.Add(ADllInfo.intfName, rawIntf);
-      if not FModules.ContainsKey(ADllInfo.FileName) then
-        FModules.Add(ADllInfo.FileName, hMod);
+      FProviders.TryAdd(ADllInfo.intfName, rawIntf);
+      FModules.TryAdd(ADllInfo.FileName, hMod);
     finally
       FLock.Leave;
     end;
@@ -174,7 +175,7 @@ begin
   Result := InternalLoad(ADllInfo, ShowError);
 end;
 
-function TDllManager.UnLoad(const ADllInfo: TDLLInfo): Boolean;
+function TDllManager.InternalUnLoad(const ADllInfo: TDLLInfo): Boolean;
 var
   hMod: THandle;
   intf: IInterface;
@@ -199,6 +200,11 @@ begin
   // (избегаем потенциального deadlock при освобождении объекта из DLL)
   Pointer(intf) := nil;
   Result := True;
+end;
+
+function TDllManager.UnLoad(const ADllInfo: TDLLInfo): Boolean;
+begin
+  InternalUnLoad(ADllInfo);
 end;
 
 procedure TDllManager.UnloadAll;
@@ -289,6 +295,11 @@ begin
   finally
     FLock.Leave;
   end;
+end;
+
+function TDllManager.GetLoadedCount: NativeInt;
+begin
+  Result := FProviders.Count;
 end;
 
 end.
