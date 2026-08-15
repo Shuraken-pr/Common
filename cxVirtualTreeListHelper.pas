@@ -314,7 +314,9 @@ procedure TVTBase.NodeMoveTo(AttachRecordHandle: TVTBase;
       FParent.FChildList.Remove(Self);
       ANewParent.FChildList.Add(Self);
       FParent := ANewParent;
-    end;
+    end
+      else
+      FParent.FChildList.Move(Self.Index, AttachRecordHandle.Index);
   end;
 
 begin
