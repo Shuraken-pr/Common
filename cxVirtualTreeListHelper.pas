@@ -172,6 +172,7 @@ type
   public
     constructor Create(const ATreeList: TcxVirtualTreeList); virtual;
     destructor Destroy; override;
+    procedure DataChanged; override;
     { Публичная точка входа для создания записей.  Внешние модули
       ДОЛЖНЫ использовать этот метод для добавления записей — обе
       стратегии маршрутизируются через него, а TVTLoadAllDataSource
@@ -314,7 +315,9 @@ procedure TVTBase.NodeMoveTo(AttachRecordHandle: TVTBase;
       FParent.FChildList.Remove(Self);
       ANewParent.FChildList.Add(Self);
       FParent := ANewParent;
-    end;
+    end
+      else
+      FParent.FChildList.Move(Self.Index, AttachRecordHandle.Index);
   end;
 
 begin
@@ -465,6 +468,12 @@ begin
   ARec := TVTBaseRecord(ARecordHandle);
   ARec.SetValue(Integer(AItemHandle), AValue);
   DataChanged;
+end;
+
+procedure TVTBaseDataSource<T>.DataChanged;
+begin
+  if Assigned(FTreeList) then
+    inherited;
 end;
 
 procedure TVTBaseDataSource<T>.DeleteRecord(
