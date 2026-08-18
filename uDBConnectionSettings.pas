@@ -407,6 +407,8 @@ begin
 end;
 
 procedure TDBConnectionSettings.ApplyToConnection(AConn: TFDConnection);
+var
+  bakMonitorBy: TFDMonitorBy;
 begin
   if AConn = nil then
     Exit;
@@ -415,8 +417,14 @@ begin
   AConn.Connected := False;
 
   // Очищаем только параметры соединения, сохраняя опции ресурсов/пула
-  AConn.Params.Clear;
-  ApplyParamsToDef(AConn.Params);
+  //Если в параметрах был задан MonitorBy, сохраним его и восстановим после применения параметров
+  bakMonitorBy := AConn.Params.MonitorBy;
+  try
+    AConn.Params.Clear;
+    ApplyParamsToDef(AConn.Params);
+  finally
+    AConn.Params.MonitorBy := bakMonitorBy;
+  end;
 end;
 
 procedure TDBConnectionSettings.RegisterInManager(var AManager: TFDManager;
